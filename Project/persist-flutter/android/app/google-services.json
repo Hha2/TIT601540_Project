@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "880714616",
+    "project_id": "persist-app-312ac",
+    "storage_bucket": "persist-app-312ac.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:880714616:android:69e9d9d4260f6026c1de8d",
+        "android_client_info": {
+          "package_name": "com.persist.persist_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhlsgHTEAX09XBUhJjiosMgGGEIxuDaZE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
