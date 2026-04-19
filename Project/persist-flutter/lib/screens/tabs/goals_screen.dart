@@ -50,7 +50,8 @@ class _GoalsScreenState extends State<GoalsScreen> {
       backgroundColor: theme.background,
       body: CustomScrollView(
         slivers: [
-          SliverAppBar(
+          //Floating app bar
+          SliverAppBar(  
             floating: true,
             backgroundColor: theme.background,
             title: Column(
@@ -102,7 +103,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
             ],
           ),
 
-          // Stats
+          // Stats Row
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -151,10 +152,9 @@ class _GoalsScreenState extends State<GoalsScreen> {
               ),
             ),
           ),
-
           const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
           if (filtered.isEmpty)
+            // Empty state
             SliverToBoxAdapter(
               child: Center(
                 child: Padding(
@@ -249,6 +249,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
               ),
             )
           else
+            // list view (AnimatedSwitcher)
             SliverToBoxAdapter(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 350),
@@ -276,7 +277,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
                 ),
               ),
             ),
-
+          // bottom spacing
           const SliverToBoxAdapter(child: SizedBox(height: 32)),
         ],
       ),
