@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-// Replace with your OpenRouter API key
+// OpenRouter API key
 const _apiKey = 'YOUR_OPENROUTER_API_KEY';
 const _baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
 const _model = 'mistralai/mistral-7b-instruct';
