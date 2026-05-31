@@ -136,6 +136,45 @@ class FirestoreService {
     return (moodFactor + completionFactor).clamp(0.0, 0.95);
   }
 
+
+
+  Future<List<Map<String, dynamic>>> getTaskCompletionEventsLast7Days() async {
+    final since = DateTime.now().subtract(const Duration(days: 7));
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('events')
+        .where('type', isEqualTo: 'task_complete')
+        .where('timestamp', isGreaterThan: Timestamp.fromDate(since))
+        .get();
+
+    return snap.docs.map((d) {
+      final data = d.data();
+      final ts = data['timestamp'];
+      final dt = ts is Timestamp ? ts.toDate() : DateTime.now();
+      return {
+        'id': d.id,
+        'hour': data['hour'] is int ? data['hour'] : dt.hour,
+        'timestamp': dt,
+        'goalId': data['goalId'],
+        'dayId': data['dayId'],
+        'taskId': data['taskId'],
+      };
+    }).toList();
+  }
+
+  Future<List<AppUsageEntry>> getAppUsageLast7Days() async {
+    final since = DateTime.now().subtract(const Duration(days: 7));
+    final sinceStr = DateFormat('yyyy-MM-dd').format(since);
+    final snap = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('appUsage')
+        .where('date', isGreaterThanOrEqualTo: sinceStr)
+        .get();
+    return snap.docs.map(AppUsageEntry.fromFirestore).toList();
+  }
+
   // ── Chats ──────────────────────────────────────────────────────────────────
 
   Future<void> saveChat(bool isUser, String text, {bool showLabel = false}) async {
@@ -153,6 +192,7 @@ class FirestoreService {
         .doc(uid)
         .collection('chats')
         .orderBy('timestamp')
+        .limitToLast(40)
         .snapshots()
         .map((snap) => snap.docs
             .map((d) => {'id': d.id, ...d.data()})

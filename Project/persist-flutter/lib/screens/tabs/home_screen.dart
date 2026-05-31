@@ -19,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final Map<String, AnimationController> _fillControllers = {};
   String? _pendingUndoTaskId;
+  String? _completingTaskId;
   Timer? _undoTimer;
   List<Map<String, dynamic>> _localTasks = [];
   List<double> _moodData = [];
@@ -79,9 +80,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleTaskTap(Map<String, dynamic> taskEntry) async {
     final task = taskEntry['task'];
-    if (task.done) return;
+    if (task.done || _completingTaskId != null) return;
 
-    // Show mood modal
     final mood = await showModalBottomSheet<int>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -90,7 +90,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (mood == null || !mounted) return;
 
-    // Log mood and complete task
+    setState(() => _completingTaskId = task.id);
+    await Future.delayed(const Duration(milliseconds: 650));
+    if (!mounted) return;
+
     final uid = context.read<AuthProvider>().user?.uid;
     final goalsProvider = context.read<GoalsProvider>();
     if (uid != null) {
@@ -110,13 +113,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    setState(() {
-      _pendingUndoTaskId = task.id;
-    });
     _undoTimer?.cancel();
-    _undoTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) setState(() => _pendingUndoTaskId = null);
-    });
+    if (mounted) {
+      setState(() {
+        _pendingUndoTaskId = null;
+        _completingTaskId = null;
+      });
+    }
   }
 
   Future<void> _undoTask(Map<String, dynamic> taskEntry) async {
@@ -140,8 +143,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final goals = context.watch<GoalsProvider>();
     final name = auth.profile?.name ?? 'Friend';
     final tasks = goals.getTodayTasks();
-    final stability = auth.profile?.stabilityScore ?? 72;
-    final streak = auth.profile?.streak ?? 0;
+    final summaries = goals.getTodayGoalSummaries();
+    final allVisibleDaysComplete = summaries.isNotEmpty && summaries.every((s) => s['allDone'] == true);
+    final stability = goals.stabilityScore;
+    final streak = goals.currentStreak;
 
     return Scaffold(
       backgroundColor: theme.background,
@@ -184,13 +189,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ],
                             ),
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(12),
+                            GestureDetector(
+                              onTap: _showUpgradeDialog,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 22),
                               ),
-                              child: const Text('👑', style: TextStyle(fontSize: 20)),
                             ),
                           ],
                         ),
@@ -303,6 +311,126 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
+            if (summaries.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Column(
+                    children: summaries.map((summary) {
+                      final done = summary['doneCount'] as int;
+                      final total = summary['totalCount'] as int;
+                      final open = summary['openCount'] as int;
+                      final overdue = summary['overdueDays'] as int;
+                      final allDone = summary['allDone'] == true;
+                      final rate = (summary['completionRate'] as double).clamp(0.0, 1.0);
+
+                      final statusText = allDone
+                          ? 'Day ${summary['dayNum']} complete. Next day unlocks tomorrow.'
+                          : overdue > 0
+                              ? '$open task${open == 1 ? '' : 's'} left • $overdue day${overdue == 1 ? '' : 's'} overdue'
+                              : '$open task${open == 1 ? '' : 's'} left today';
+
+                      final statusColor = allDone
+                          ? theme.success
+                          : overdue > 0
+                              ? theme.danger
+                              : theme.accent;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: allDone
+                              ? theme.success.withValues(alpha: 0.08)
+                              : overdue > 0
+                                  ? theme.danger.withValues(alpha: 0.08)
+                                  : theme.card,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    allDone
+                                        ? Icons.lock_clock_rounded
+                                        : overdue > 0
+                                            ? Icons.warning_amber_rounded
+                                            : _categoryIcon(summary['goalCategory']),
+                                    color: statusColor,
+                                    size: 18,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${summary['goalCategory']} • ${summary['goalName']}',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: theme.text,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        statusText,
+                                        style: TextStyle(
+                                          color: statusColor,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Text(
+                                  '$done/$total',
+                                  style: TextStyle(
+                                    color: theme.text,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(99),
+                              child: LinearProgressIndicator(
+                                value: rate,
+                                minHeight: 7,
+                                backgroundColor: theme.border,
+                                valueColor: AlwaysStoppedAnimation(statusColor),
+                              ),
+                            ),
+                            if (overdue > 0 && !allDone) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Impact: stability drops and skip risk rises until this day is cleared.',
+                                style: TextStyle(color: theme.textMuted, fontSize: 11),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+
             if (tasks.isEmpty)
               SliverToBoxAdapter(
                 child: Padding(
@@ -313,7 +441,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text('🎉', style: const TextStyle(fontSize: 48)),
                         const SizedBox(height: 12),
                         Text(
-                          'No tasks for today!',
+                          allVisibleDaysComplete ? 'Today is complete!' : 'No tasks for today!',
                           style: TextStyle(
                             color: theme.text,
                             fontSize: 18,
@@ -322,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Create a goal to get started.',
+                          allVisibleDaysComplete ? 'Next day unlocks tomorrow. Rest without guilt.' : 'Create a goal to get started.',
                           style: TextStyle(color: theme.textMuted),
                         ),
                       ],
@@ -338,91 +466,146 @@ class _HomeScreenState extends State<HomeScreen> {
                     final task = entry['task'];
                     final isUndo = _pendingUndoTaskId == task.id;
 
-                    return Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: AnimatedOpacity(
-                        opacity: task.done && !isUndo ? 0.5 : 1.0,
-                        duration: const Duration(milliseconds: 300),
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: theme.card,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: theme.border),
-                          ),
-                          child: isUndo
-                              ? Row(
-                                  children: [
-                                    Text('✅ Done!',
-                                        style: TextStyle(color: theme.accent)),
-                                    const Spacer(),
-                                    TextButton(
-                                      onPressed: () => _undoTask(entry),
-                                      child: Text('Undo',
-                                          style: TextStyle(color: theme.accent)),
+                    final currentHeading =
+                        '${entry['goalCategory'] ?? 'Goal'} • ${entry['goalName'] ?? ''}';
+
+                    String? previousHeading;
+                    if (index > 0) {
+                      final previousEntry = tasks[index - 1];
+                      previousHeading =
+                          '${previousEntry['goalCategory'] ?? 'Goal'} • ${previousEntry['goalName'] ?? ''}';
+                    }
+
+                    final showHeading = index == 0 || currentHeading != previousHeading;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (showHeading)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _categoryIcon(entry['goalCategory']),
+                                  color: theme.accent,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    currentHeading,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: theme.text,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800,
                                     ),
-                                  ],
-                                )
-                              : Row(
-                                  children: [
-                                    Text(entry['categoryEmoji'] ?? '🎯',
-                                        style: const TextStyle(fontSize: 20)),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                          child: AnimatedOpacity(
+                            opacity: task.done && !isUndo ? 0.5 : 1.0,
+                            duration: const Duration(milliseconds: 300),
+                            child: GestureDetector(
+                              onTap: task.done ? null : () => _handleTaskTap(entry),
+                              child: Stack(
+                                children: [
+                                  TweenAnimationBuilder<double>(
+                                    tween: Tween<double>(
+                                      begin: 0,
+                                      end: _completingTaskId == task.id ? 1 : 0,
+                                    ),
+                                    duration: const Duration(milliseconds: 600),
+                                    curve: Curves.easeOutCubic,
+                                    builder: (context, value, child) {
+                                      return ClipRRect(
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: LinearProgressIndicator(
+                                          value: value,
+                                          minHeight: 62,
+                                          backgroundColor: theme.card,
+                                          valueColor: AlwaysStoppedAnimation(theme.accentSoft),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.all(14),
+                                    decoration: BoxDecoration(
+                                      color: Colors.transparent,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: _completingTaskId == task.id ? theme.accent : theme.border,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        AnimatedScale(
+                                          duration: const Duration(milliseconds: 220),
+                                          scale: _completingTaskId == task.id ? 1.08 : 1,
+                                          child: Container(
+                                            width: 34,
+                                            height: 34,
+                                            decoration: BoxDecoration(
+                                              color: theme.accentSoft,
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Icon(
+                                              _categoryIcon(entry['goalCategory']),
+                                              color: theme.accent,
+                                              size: 18,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
                                             task.text,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                             style: TextStyle(
                                               color: theme.text,
                                               fontSize: 14,
                                               fontWeight: FontWeight.w500,
-                                              decoration: task.done
-                                                  ? TextDecoration.lineThrough
-                                                  : null,
+                                              decoration: task.done ? TextDecoration.lineThrough : null,
                                             ),
-                                          ),
-                                          Text(
-                                            entry['goalName'] ?? '',
-                                            style: TextStyle(
-                                              color: theme.textMuted,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: task.done
-                                          ? null
-                                          : () => _handleTaskTap(entry),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        width: 24,
-                                        height: 24,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: task.done
-                                              ? theme.accent
-                                              : Colors.transparent,
-                                          border: Border.all(
-                                            color: task.done
-                                                ? theme.accent
-                                                : theme.border,
-                                            width: 2,
                                           ),
                                         ),
-                                        child: task.done
-                                            ? const Icon(Icons.check,
-                                                color: Colors.white, size: 14)
-                                            : null,
-                                      ),
+                                        AnimatedContainer(
+                                          duration: const Duration(milliseconds: 220),
+                                          width: 24,
+                                          height: 24,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            color: (_completingTaskId == task.id || task.done)
+                                                ? theme.accent
+                                                : Colors.transparent,
+                                            border: Border.all(
+                                              color: (_completingTaskId == task.id || task.done)
+                                                  ? theme.accent
+                                                  : theme.border,
+                                              width: 2,
+                                            ),
+                                          ),
+                                          child: (_completingTaskId == task.id || task.done)
+                                              ? const Icon(Icons.check, color: Colors.white, size: 14)
+                                              : null,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     );
                   },
                   childCount: tasks.length,
@@ -436,11 +619,58 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showUpgradeDialog() {
+    final theme = context.read<ThemeProvider>().theme;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: theme.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Persist Premium', style: TextStyle(color: theme.text, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Premium preview: unlimited goals, deeper AI coaching, weekly reports, advanced risk insights, and smart reminders. This is a demo action for presentation.',
+          style: TextStyle(color: theme.textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: TextStyle(color: theme.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _greeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Good morning,';
     if (hour < 17) return 'Good afternoon,';
     return 'Good evening,';
+  }
+
+  IconData _categoryIcon(String? category) {
+    final c = (category ?? '').toLowerCase();
+
+    if (c.contains('study') || c.contains('learning') || c.contains('education')) {
+      return Icons.school_rounded;
+    }
+    if (c.contains('fitness') || c.contains('health') || c.contains('workout')) {
+      return Icons.fitness_center_rounded;
+    }
+    if (c.contains('work') || c.contains('career') || c.contains('productivity')) {
+      return Icons.work_rounded;
+    }
+    if (c.contains('money') || c.contains('finance') || c.contains('saving')) {
+      return Icons.account_balance_wallet_rounded;
+    }
+    if (c.contains('mind') || c.contains('mental') || c.contains('reflect')) {
+      return Icons.psychology_rounded;
+    }
+    if (c.contains('creative') || c.contains('art') || c.contains('design')) {
+      return Icons.brush_rounded;
+    }
+
+    return Icons.flag_rounded;
   }
 }
 

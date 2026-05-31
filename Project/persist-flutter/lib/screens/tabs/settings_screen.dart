@@ -33,6 +33,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (path != null && File(path).existsSync()) {
       setState(() => _localImage = File(path));
     }
+    setState(() {
+      _dailyReminders = prefs.getBool('daily_reminders') ?? true;
+      _goalNudges = prefs.getBool('goal_nudges') ?? true;
+      _weeklySummary = prefs.getBool('weekly_summary') ?? false;
+    });
+  }
+
+  Future<void> _saveNotificationSetting(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Notification preference saved. Real push reminders require Android notification setup.')),
+    );
+  }
+
+  void _showUpgradeDialog() {
+    final theme = context.read<ThemeProvider>().theme;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: theme.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Persist Premium', style: TextStyle(color: theme.text, fontWeight: FontWeight.bold)),
+        content: Text(
+          'Premium preview: unlimited goals, advanced AI coaching, weekly reports, smart reminders, and deeper risk insights. This is a demo action for presentation.',
+          style: TextStyle(color: theme.textMuted),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Close', style: TextStyle(color: theme.accent))),
+        ],
+      ),
+    );
   }
 
   Future<void> _pickImage() async {
@@ -242,7 +275,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Container(
+              child: GestureDetector(
+                onTap: _showUpgradeDialog,
+                child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: theme.card,
@@ -290,6 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ),
           ),
+          ),
 
           // Notifications
           SliverToBoxAdapter(
@@ -304,21 +340,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: 'Daily Reminders',
                     subtitle: '8:00 AM every day',
                     value: _dailyReminders,
-                    onChanged: (v) => setState(() => _dailyReminders = v),
+                    onChanged: (v) { setState(() => _dailyReminders = v); _saveNotificationSetting('daily_reminders', v); },
                   ),
                   _SwitchTile(
                     theme: theme,
                     title: 'Goal Nudges',
                     subtitle: 'When you\'re falling behind',
                     value: _goalNudges,
-                    onChanged: (v) => setState(() => _goalNudges = v),
+                    onChanged: (v) { setState(() => _goalNudges = v); _saveNotificationSetting('goal_nudges', v); },
                   ),
                   _SwitchTile(
                     theme: theme,
                     title: 'Weekly AI Summary',
                     subtitle: 'Every Sunday evening',
                     value: _weeklySummary,
-                    onChanged: (v) => setState(() => _weeklySummary = v),
+                    onChanged: (v) { setState(() => _weeklySummary = v); _saveNotificationSetting('weekly_summary', v); },
                   ),
                 ],
               ),

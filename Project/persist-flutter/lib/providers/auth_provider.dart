@@ -75,4 +75,30 @@ class AuthProvider extends ChangeNotifier {
     if (_user != null) await _fetchProfile(_user!.uid);
     notifyListeners();
   }
+
+
+  Future<void> deleteAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    final uid = user.uid;
+
+    final userRef = _db.collection('users').doc(uid);
+    final knownCollections = ['goals', 'moods', 'events', 'chats', 'appUsage'];
+
+    for (final collectionName in knownCollections) {
+      final snap = await userRef.collection(collectionName).limit(500).get();
+      if (snap.docs.isEmpty) continue;
+      final batch = _db.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+
+    await userRef.delete().catchError((_) {});
+    await user.delete();
+    _user = null;
+    _profile = null;
+    notifyListeners();
+  }
 }

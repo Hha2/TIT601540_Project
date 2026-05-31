@@ -85,15 +85,16 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
         slivers: [
           // Gradient header
           SliverAppBar(
-            expandedHeight: 160,
+            expandedHeight: 210,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(gradient: theme.headerGradient),
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 56, 20, 20),
+                    padding: const EdgeInsets.fromLTRB(20, 56, 20, 16),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(children: [
@@ -113,6 +114,8 @@ class _GoalDetailScreenState extends State<GoalDetailScreen> {
                             color: Colors.transparent,
                             child: Text(
                               goal.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,

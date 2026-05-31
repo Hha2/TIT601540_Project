@@ -42,25 +42,38 @@ class _ReflectScreenState extends State<ReflectScreen> {
     if (uid == null) return;
     _svc = FirestoreService(uid);
 
-    // Listen to stored chat messages
+    // Listen to latest stored chat messages. The welcome message is local-only,
+    // so repeated logins do not duplicate it in Firestore.
     _svc!.chatStream().listen((msgs) {
-      if (mounted) setState(() => _messages = msgs);
-      _scrollToBottom();
-    });
-
-    // Send welcome message if empty
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (_messages.isEmpty && mounted) {
-        _sendAiMessage(
-          "Hey! I'm your Persist AI Coach 👋 I'm here to help you stay consistent with your goals. How are you feeling today? You can also say 'create a goal' and I'll help you set one up!",
-          showLabel: true,
-        );
+      final localWelcome = {
+        'id': 'local_welcome',
+        'isUser': false,
+        'text': "Hey! I'm your Persist AI Coach 👋 I'm here to help you stay consistent. How are you feeling today? You can also say 'create a goal' and I'll help you set one up!",
+        'showLabel': true,
+        'localOnly': true,
+      };
+      if (mounted) {
+        setState(() => _messages = msgs.isEmpty ? [localWelcome] : msgs);
       }
+      _scrollToBottom();
     });
   }
 
-  Future<void> _sendAiMessage(String text, {bool showLabel = false}) async {
-    await _svc?.saveChat(false, text, showLabel: showLabel);
+  Future<void> _sendAiMessage(String text, {bool showLabel = false, bool save = true}) async {
+    if (save) {
+      await _svc?.saveChat(false, text, showLabel: showLabel);
+    } else if (mounted) {
+      setState(() => _messages = [
+            ..._messages,
+            {
+              'id': 'local_${DateTime.now().microsecondsSinceEpoch}',
+              'isUser': false,
+              'text': text,
+              'showLabel': showLabel,
+              'localOnly': true,
+            }
+          ]);
+    }
   }
 
   Future<void> _sendMessage() async {

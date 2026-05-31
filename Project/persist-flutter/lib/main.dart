@@ -51,7 +51,53 @@ class AppRoot extends StatelessWidget {
       return Scaffold(
         backgroundColor: theme.background,
         body: Center(
-          child: CircularProgressIndicator(color: theme.accent),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: theme.card,
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: theme.border),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 24,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(22),
+                  child: Image.asset('assets/Logo.jpeg', fit: BoxFit.cover),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                'Persist',
+                style: TextStyle(
+                  color: theme.text,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Preparing your progress...',
+                style: TextStyle(color: theme.textMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 22),
+              SizedBox(
+                width: 34,
+                height: 34,
+                child: CircularProgressIndicator(color: theme.accent, strokeWidth: 3),
+              ),
+            ],
+          ),
         ),
       );
     }

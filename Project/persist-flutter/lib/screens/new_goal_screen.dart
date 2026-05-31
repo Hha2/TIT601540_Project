@@ -26,21 +26,43 @@ class NewGoalScreen extends StatefulWidget {
   State<NewGoalScreen> createState() => _NewGoalScreenState();
 }
 
+class _ManualDayDraft {
+  final TextEditingController titleCtrl;
+  final List<TextEditingController> taskCtrls;
+
+  _ManualDayDraft({String? title, List<String>? tasks})
+      : titleCtrl = TextEditingController(text: title ?? ''),
+        taskCtrls = (tasks == null || tasks.isEmpty ? [''] : tasks)
+            .map((t) => TextEditingController(text: t))
+            .toList();
+
+  void dispose() {
+    titleCtrl.dispose();
+    for (final c in taskCtrls) {
+      c.dispose();
+    }
+  }
+}
+
 class _NewGoalScreenState extends State<NewGoalScreen> {
   final _nameCtrl = TextEditingController();
   String _category = 'Learning';
-  int _days = 30;
+  int _days = 7;
   String _difficulty = 'Medium';
   bool _loading = false;
   bool _aiLoading = false;
   List<Map<String, dynamic>>? _aiPlan;
-  final List<String> _milestones = [];
-  final _milestoneCtrl = TextEditingController();
+  final List<_ManualDayDraft> _manualDays = [];
 
   bool get _isEditing => widget.goal != null;
 
   final _categories = [
-    'Learning', 'Fitness', 'Mindfulness', 'Career', 'Health', 'Creative'
+    'Learning',
+    'Fitness',
+    'Mindfulness',
+    'Career',
+    'Health',
+    'Creative'
   ];
   final _durations = [7, 21, 30, 50, 90];
   final _difficulties = ['Easy', 'Medium', 'Hard'];
@@ -52,18 +74,33 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
       _nameCtrl.text = widget.goal!.name;
       _category = widget.goal!.category;
       _days = widget.goal!.totalDays;
+      for (final day in widget.goal!.days) {
+        _manualDays.add(_ManualDayDraft(
+          title: day.title,
+          tasks: day.tasks.map((t) => t.text).toList(),
+        ));
+      }
     } else if (widget.prefillName != null) {
       _nameCtrl.text = widget.prefillName!;
-      _days = widget.prefillDays ?? 30;
+      _days = widget.prefillDays ?? 7;
       _category = widget.prefillCategory ?? 'Learning';
       _aiPlan = widget.aiPlan;
+    }
+
+    if (_manualDays.isEmpty) {
+      _manualDays.add(_ManualDayDraft(
+        title: 'Day 1 — Foundation',
+        tasks: ['Start with one focused action'],
+      ));
     }
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
-    _milestoneCtrl.dispose();
+    for (final day in _manualDays) {
+      day.dispose();
+    }
     super.dispose();
   }
 
@@ -92,11 +129,58 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
     }
   }
 
+  void _addManualDay() {
+    setState(() {
+      final dayNum = _manualDays.length + 1;
+      _manualDays.add(_ManualDayDraft(
+        title: 'Day $dayNum — New Step',
+        tasks: [''],
+      ));
+      _days = _manualDays.length;
+      _aiPlan = null;
+    });
+  }
+
+  void _removeManualDay(int index) {
+    if (_manualDays.length <= 1) return;
+    setState(() {
+      final removed = _manualDays.removeAt(index);
+      removed.dispose();
+      _days = _manualDays.length;
+      _aiPlan = null;
+    });
+  }
+
+  void _addTaskToDay(int index) {
+    setState(() {
+      _manualDays[index].taskCtrls.add(TextEditingController());
+      _aiPlan = null;
+    });
+  }
+
+  void _removeTaskFromDay(int dayIndex, int taskIndex) {
+    final day = _manualDays[dayIndex];
+    if (day.taskCtrls.length <= 1) return;
+    setState(() {
+      final removed = day.taskCtrls.removeAt(taskIndex);
+      removed.dispose();
+      _aiPlan = null;
+    });
+  }
+
   Future<void> _save() async {
     final name = _nameCtrl.text.trim();
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a goal name.')),
+      );
+      return;
+    }
+
+    final days = _buildDays();
+    if (days.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add at least one day with one task.')),
       );
       return;
     }
@@ -110,21 +194,21 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
         await goalsProvider.editGoal(widget.goal!.id, {
           'name': name,
           'category': _category,
+          'totalDays': days.length,
+          'days': days.map((d) => d.toMap()).toList(),
         });
         if (mounted) Navigator.pop(context);
         return;
       }
 
-      // Build days from AI plan or milestones
-      final days = _buildDays();
       final dueDate = DateFormat('MMM d, yyyy')
-          .format(DateTime.now().add(Duration(days: _days)));
+          .format(DateTime.now().add(Duration(days: days.length)));
 
       final goal = GoalModel(
         id: '',
         name: name,
         category: _category,
-        totalDays: _days,
+        totalDays: days.length,
         dueDate: dueDate,
         completedDays: 0,
         streakDays: 0,
@@ -148,57 +232,61 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
   }
 
   List<DayModel> _buildDays() {
-    if (_aiPlan != null) {
+    if (_aiPlan != null && _aiPlan!.isNotEmpty) {
       return List.generate(_days, (i) {
         final dayNum = i + 1;
         final planDay = i < _aiPlan!.length ? _aiPlan![i] : null;
-        final isToday = i == 0;
-
-        final tasks = planDay != null
-            ? (planDay['tasks'] as List<dynamic>? ?? [])
-                .asMap()
-                .entries
-                .map((e) => TaskModel(
-                      id: 'task_${dayNum}_${e.key}',
-                      text: e.value.toString(),
-                    ))
-                .toList()
-            : [
-                TaskModel(id: 'task_${dayNum}_0', text: 'Task 1'),
-                TaskModel(id: 'task_${dayNum}_1', text: 'Task 2'),
-                TaskModel(id: 'task_${dayNum}_2', text: 'Task 3'),
-              ];
+        final rawTasks = (planDay?['tasks'] as List<dynamic>? ?? [])
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+        final tasks = rawTasks.isEmpty ? ['Review and progress'] : rawTasks;
 
         return DayModel(
           id: 'day_$dayNum',
           dayNum: dayNum,
           title: planDay?['title']?.toString() ?? 'Day $dayNum',
-          status: isToday ? 'today' : 'upcoming',
-          tasks: tasks,
+          status: i == 0 ? 'today' : 'upcoming',
+          activatedDate: i == 0 ? DateFormat('yyyy-MM-dd').format(DateTime.now()) : null,
+          tasks: tasks
+              .asMap()
+              .entries
+              .map((e) => TaskModel(id: 'task_${dayNum}_${e.key}', text: e.value))
+              .toList(),
         );
       });
     }
 
-    // Build from milestones
-    return List.generate(_days, (i) {
+    final validDays = <DayModel>[];
+    for (var i = 0; i < _manualDays.length; i++) {
+      final draft = _manualDays[i];
       final dayNum = i + 1;
-      final milestoneIndex = (i * _milestones.length / _days).floor();
-      final milestone = _milestones.isNotEmpty
-          ? _milestones[milestoneIndex.clamp(0, _milestones.length - 1)]
-          : 'Goal progress';
+      final title = draft.titleCtrl.text.trim().isEmpty
+          ? 'Day $dayNum'
+          : draft.titleCtrl.text.trim();
+      final tasks = draft.taskCtrls
+          .map((c) => c.text.trim())
+          .where((t) => t.isNotEmpty)
+          .toList();
+      if (tasks.isEmpty) continue;
 
-      return DayModel(
-        id: 'day_$dayNum',
-        dayNum: dayNum,
-        title: 'Day $dayNum — $milestone',
-        status: i == 0 ? 'today' : 'upcoming',
-        tasks: [
-          TaskModel(id: 'task_${dayNum}_0', text: 'Work on: $milestone'),
-          TaskModel(id: 'task_${dayNum}_1', text: 'Review progress'),
-          TaskModel(id: 'task_${dayNum}_2', text: 'Reflect & plan next step'),
-        ],
-      );
-    });
+      validDays.add(DayModel(
+        id: 'day_${validDays.length + 1}',
+        dayNum: validDays.length + 1,
+        title: title,
+        status: validDays.isEmpty ? 'today' : 'upcoming',
+        activatedDate: validDays.isEmpty ? DateFormat('yyyy-MM-dd').format(DateTime.now()) : null,
+        tasks: tasks
+            .asMap()
+            .entries
+            .map((e) => TaskModel(
+                  id: 'task_${validDays.length + 1}_${e.key}',
+                  text: e.value,
+                ))
+            .toList(),
+      ));
+    }
+    return validDays;
   }
 
   @override
@@ -209,9 +297,9 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
       backgroundColor: theme.background,
       body: CustomScrollView(
         slivers: [
-          // Header
           SliverAppBar(
             pinned: true,
+            expandedHeight: 110,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(gradient: theme.headerGradient),
@@ -229,24 +317,21 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
             ),
             backgroundColor: theme.gradientHeader[0],
           ),
-
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Goal name
                   _Label(theme: theme, text: 'Goal Name'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _nameCtrl,
                     style: TextStyle(color: theme.text),
-                    decoration: _inputDeco(theme, 'e.g., Learn Spanish'),
+                    decoration: _inputDeco(theme, 'e.g., Learn Flutter'),
                   ),
                   const SizedBox(height: 20),
 
-                  // Category
                   _Label(theme: theme, text: 'Category'),
                   const SizedBox(height: 8),
                   Wrap(
@@ -282,16 +367,19 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // Duration (hidden when editing)
                   if (!_isEditing) ...[
-                    _Label(theme: theme, text: 'Duration (Days)'),
+                    _Label(theme: theme, text: 'AI Duration'),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
+                      runSpacing: 8,
                       children: _durations.map((d) {
                         final selected = _days == d;
                         return GestureDetector(
-                          onTap: () => setState(() => _days = d),
+                          onTap: () => setState(() {
+                            _days = d;
+                            _aiPlan = null;
+                          }),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             padding: const EdgeInsets.symmetric(
@@ -318,7 +406,6 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // Difficulty
                     _Label(theme: theme, text: 'Difficulty'),
                     const SizedBox(height: 8),
                     Row(
@@ -353,232 +440,13 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // AI Builder card
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.card,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: theme.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(children: [
-                            Text('✦', style: TextStyle(color: theme.accent)),
-                            const SizedBox(width: 8),
-                            Text(
-                              'AI Build for Me',
-                              style: TextStyle(
-                                color: theme.text,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ]),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Let AI generate a day-by-day plan for your goal.',
-                            style: TextStyle(color: theme.textMuted, fontSize: 13),
-                          ),
-                          const SizedBox(height: 12),
-                          GestureDetector(
-                            onTap: _aiLoading ? null : _generateAiPlan,
-                            child: Container(
-                              width: double.infinity,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                gradient: theme.linearGradient,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Center(
-                                child: _aiLoading
-                                    ? const SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Text(
-                                        'Generate Plan',
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                          ),
-
-                          // AI plan preview
-                          if (_aiPlan != null) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              'Generated Plan Preview:',
-                              style: TextStyle(
-                                  color: theme.textMuted, fontSize: 13),
-                            ),
-                            const SizedBox(height: 8),
-                            ..._aiPlan!.take(5).map((day) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 6),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 24,
-                                        height: 24,
-                                        decoration: BoxDecoration(
-                                          color: theme.accentSoft,
-                                          borderRadius:
-                                              BorderRadius.circular(6),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            '${day['dayNum']}',
-                                            style: TextStyle(
-                                              color: theme.accent,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Text(
-                                          day['title']?.toString() ?? '',
-                                          style: TextStyle(
-                                              color: theme.text,
-                                              fontSize: 13),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                )),
-                            if (_aiPlan!.length > 5)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Text(
-                                  '· · ·  ${_aiPlan!.length - 5} more days generated · · ·',
-                                  style: TextStyle(
-                                      color: theme.textMuted, fontSize: 12),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                          ],
-                        ],
-                      ),
-                    ),
+                    _aiBuilderCard(theme),
                     const SizedBox(height: 20),
-
-                    // Manual milestones
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.card,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: theme.border),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Manual Milestones',
-                            style: TextStyle(
-                              color: theme.text,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          ..._milestones.asMap().entries.map((entry) {
-                            final colors = [
-                              theme.accent,
-                              theme.warning,
-                              theme.success,
-                              theme.danger,
-                            ];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: colors[entry.key % colors.length],
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      entry.value,
-                                      style: TextStyle(color: theme.text),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () => setState(
-                                        () => _milestones.removeAt(entry.key)),
-                                    child: Icon(Icons.close,
-                                        size: 16, color: theme.textMuted),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: _milestoneCtrl,
-                                  style: TextStyle(color: theme.text, fontSize: 14),
-                                  decoration: InputDecoration(
-                                    hintText: 'Add milestone...',
-                                    hintStyle: TextStyle(color: theme.textFaint),
-                                    border: InputBorder.none,
-                                    isDense: true,
-                                  ),
-                                  onSubmitted: (text) {
-                                    if (text.trim().isEmpty) return;
-                                    setState(() {
-                                      _milestones.add(text.trim());
-                                      _milestoneCtrl.clear();
-                                    });
-                                  },
-                                ),
-                              ),
-                              GestureDetector(
-                                onTap: () {
-                                  if (_milestoneCtrl.text.trim().isEmpty) return;
-                                  setState(() {
-                                    _milestones.add(_milestoneCtrl.text.trim());
-                                    _milestoneCtrl.clear();
-                                  });
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: theme.accentSoft,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Icon(Icons.add,
-                                      color: theme.accent, size: 18),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
                   ],
 
+                  _manualBuilderCard(theme),
                   const SizedBox(height: 32),
 
-                  // Save button
                   GestureDetector(
                     onTap: _loading ? null : _save,
                     child: Container(
@@ -613,12 +481,250 @@ class _NewGoalScreenState extends State<NewGoalScreen> {
     );
   }
 
+  Widget _aiBuilderCard(dynamic theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(Icons.auto_awesome_rounded, color: theme.accent, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'AI Build for Me',
+              style: TextStyle(
+                color: theme.text,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+            'AI creates headings and tasks for every day.',
+            style: TextStyle(color: theme.textMuted, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: _aiLoading ? null : _generateAiPlan,
+            child: Container(
+              width: double.infinity,
+              height: 44,
+              decoration: BoxDecoration(
+                gradient: theme.linearGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: _aiLoading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text(
+                        'Generate Plan',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+          ),
+          if (_aiPlan != null) ...[
+            const SizedBox(height: 16),
+            Text(
+              'Generated Plan Preview:',
+              style: TextStyle(color: theme.textMuted, fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            ..._aiPlan!.take(5).map((day) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          color: theme.accentSoft,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${day['dayNum']}',
+                            style: TextStyle(
+                              color: theme.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          day['title']?.toString() ?? '',
+                          style: TextStyle(color: theme.text, fontSize: 13),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _manualBuilderCard(dynamic theme) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: theme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Manual Plan',
+                style: TextStyle(
+                  color: theme.text,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _addManualDay,
+                icon: Icon(Icons.add, color: theme.accent, size: 18),
+                label: Text('Add Day', style: TextStyle(color: theme.accent)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Each day needs a subheading and any number of tasks.',
+            style: TextStyle(color: theme.textMuted, fontSize: 12),
+          ),
+          const SizedBox(height: 14),
+          ..._manualDays.asMap().entries.map((entry) {
+            final dayIndex = entry.key;
+            final day = entry.value;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.background,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: theme.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Day ${dayIndex + 1}',
+                        style: TextStyle(
+                          color: theme.accent,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_manualDays.length > 1)
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: () => _removeManualDay(dayIndex),
+                          icon: Icon(Icons.delete_outline,
+                              color: theme.textMuted, size: 18),
+                        ),
+                    ],
+                  ),
+                  TextField(
+                    controller: day.titleCtrl,
+                    style: TextStyle(color: theme.text, fontSize: 14),
+                    decoration: _inputDeco(theme, 'Subheading e.g., Setup basics'),
+                    onChanged: (_) => _aiPlan = null,
+                  ),
+                  const SizedBox(height: 10),
+                  ...day.taskCtrls.asMap().entries.map((taskEntry) {
+                    final taskIndex = taskEntry.key;
+                    final ctrl = taskEntry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${taskIndex + 1}.',
+                            style: TextStyle(
+                              color: theme.textMuted,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: ctrl,
+                              style:
+                                  TextStyle(color: theme.text, fontSize: 14),
+                              decoration: _inputDeco(
+                                  theme, 'Task ${taskIndex + 1}'),
+                              onChanged: (_) => _aiPlan = null,
+                            ),
+                          ),
+                          if (day.taskCtrls.length > 1)
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () =>
+                                  _removeTaskFromDay(dayIndex, taskIndex),
+                              icon: Icon(Icons.close,
+                                  size: 18, color: theme.textMuted),
+                            ),
+                        ],
+                      ),
+                    );
+                  }),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _addTaskToDay(dayIndex),
+                      icon: Icon(Icons.add_task_rounded,
+                          size: 18, color: theme.accent),
+                      label: Text('Add Task',
+                          style: TextStyle(color: theme.accent)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   InputDecoration _inputDeco(dynamic theme, String hint) {
     return InputDecoration(
       hintText: hint,
       hintStyle: TextStyle(color: theme.textFaint),
       filled: true,
       fillColor: theme.card,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: theme.border),
