@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../constants/persist_brand.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../landing_screen.dart';
+import 'login_screen.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key});
+  final bool fromOnboarding;
+
+  const SignupScreen({super.key, this.fromOnboarding = false});
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -35,8 +41,12 @@ class _SignupScreenState extends State<SignupScreen> {
     final pass = _passCtrl.text;
     final confirm = _confirmCtrl.text;
 
-    if (name.isEmpty || email.isEmpty || pass.isEmpty) {
-      setState(() => _error = 'Please fill in all fields.');
+    if (name.isEmpty || email.isEmpty || pass.isEmpty || confirm.isEmpty) {
+      setState(() => _error = 'Fill all fields to create your account.');
+      return;
+    }
+    if (!email.contains('@') || !email.contains('.')) {
+      setState(() => _error = 'Enter a valid email address.');
       return;
     }
     if (pass.length < 6) {
@@ -52,182 +62,176 @@ class _SignupScreenState extends State<SignupScreen> {
       _loading = true;
       _error = null;
     });
+
     try {
       await context.read<AuthProvider>().signUp(email, pass, name);
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
     } catch (e) {
-      setState(() => _error = _friendlyError(e.toString()));
+      if (mounted) setState(() => _error = _friendlyError(e.toString()));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
   String _friendlyError(String raw) {
-    if (raw.contains('email-already-in-use')) return 'An account already exists with this email.';
+    if (raw.contains('email-already-in-use')) return 'An account already exists with this email. Log in instead.';
     if (raw.contains('invalid-email')) return 'Please enter a valid email.';
     if (raw.contains('weak-password')) return 'Password is too weak.';
-    return 'Something went wrong. Please try again.';
+    if (raw.contains('network-request-failed')) return 'Network problem. Check internet and try again.';
+    return 'Account creation failed. Please try again.';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeProvider>().theme;
+    final logo = theme.isDark ? PersistAssets.logoDark : PersistAssets.logoLight;
 
-    return Scaffold(
-      backgroundColor: theme.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 20),
-              Row(children: [
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(Icons.arrow_back_ios, color: theme.text),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Create Account',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: theme.text,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: theme.isDark ? Brightness.light : Brightness.dark,
+        systemNavigationBarColor: theme.background,
+        systemNavigationBarIconBrightness: theme.isDark ? Brightness.light : Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: theme.background,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: IconButton(
+                    onPressed: () {
+                      if (widget.fromOnboarding) {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const LandingScreen()),
+                          (_) => false,
+                        );
+                      } else {
+                        Navigator.maybePop(context);
+                      }
+                    },
+                    icon: Icon(Icons.arrow_back_ios_new_rounded, color: theme.text),
                   ),
                 ),
-              ]),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(left: 48),
-                child: Text(
-                  'Start your habit journey today',
-                  style: TextStyle(color: theme.textMuted),
-                ),
-              ),
-              const SizedBox(height: 32),
-
-              _buildField(
-                controller: _nameCtrl,
-                label: 'Full Name',
-                icon: Icons.person_outline,
-                theme: theme,
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _emailCtrl,
-                label: 'Email',
-                icon: Icons.email_outlined,
-                keyboardType: TextInputType.emailAddress,
-                theme: theme,
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _passCtrl,
-                label: 'Password',
-                icon: Icons.lock_outline,
-                obscure: _obscure,
-                suffix: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility_off : Icons.visibility,
-                    color: theme.textMuted,
+                const SizedBox(height: 8),
+                Center(child: Image.asset(logo, height: 74, fit: BoxFit.contain)),
+                const SizedBox(height: 24),
+                Text('Create your account', textAlign: TextAlign.center, style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900, color: theme.text)),
+                const SizedBox(height: 8),
+                Text('Your plan starts private and personal.', textAlign: TextAlign.center, style: TextStyle(color: theme.textMuted, fontSize: 15, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 30),
+                _AuthField(controller: _nameCtrl, label: 'Full Name', icon: Icons.person_outline_rounded, theme: theme),
+                const SizedBox(height: 14),
+                _AuthField(controller: _emailCtrl, label: 'Email', icon: Icons.email_outlined, theme: theme, keyboardType: TextInputType.emailAddress),
+                const SizedBox(height: 14),
+                _AuthField(
+                  controller: _passCtrl,
+                  label: 'Password',
+                  icon: Icons.lock_outline_rounded,
+                  theme: theme,
+                  obscure: _obscure,
+                  suffix: IconButton(
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                    icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: theme.textMuted),
                   ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
                 ),
-                theme: theme,
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _confirmCtrl,
-                label: 'Confirm Password',
-                icon: Icons.lock_outline,
-                obscure: _obscureConfirm,
-                suffix: IconButton(
-                  icon: Icon(
-                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
-                    color: theme.textMuted,
+                const SizedBox(height: 14),
+                _AuthField(
+                  controller: _confirmCtrl,
+                  label: 'Confirm Password',
+                  icon: Icons.lock_outline_rounded,
+                  theme: theme,
+                  obscure: _obscureConfirm,
+                  suffix: IconButton(
+                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    icon: Icon(_obscureConfirm ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: theme.textMuted),
                   ),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
-                ),
-                theme: theme,
-              ),
-              const SizedBox(height: 16),
-
-              if (_error != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: theme.danger.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: theme.danger.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(_error!, style: TextStyle(color: theme.danger)),
                 ),
                 const SizedBox(height: 16),
-              ],
-
-              GestureDetector(
-                onTap: _loading ? null : _signUp,
-                child: Container(
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: theme.linearGradient,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Center(
+                if (_error != null) ...[
+                  _ErrorBox(theme: theme, text: _error!),
+                  const SizedBox(height: 16),
+                ],
+                SizedBox(
+                  height: 58,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _signUp,
+                    style: ElevatedButton.styleFrom(backgroundColor: theme.accent, foregroundColor: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
                     child: _loading
-                        ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
-                        : const Text(
-                            'Create Account',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Create Account', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w900)),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 20),
+                OutlinedButton(
+                  onPressed: () => Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen())),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    foregroundColor: theme.text,
+                    side: BorderSide(color: theme.border, width: 1.2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  ),
+                  child: const Text('Already have an account? Log In', style: TextStyle(fontWeight: FontWeight.w900)),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    required dynamic theme,
-    TextInputType? keyboardType,
-    bool obscure = false,
-    Widget? suffix,
-  }) {
+class _AuthField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final dynamic theme;
+  final TextInputType? keyboardType;
+  final bool obscure;
+  final Widget? suffix;
+
+  const _AuthField({required this.controller, required this.label, required this.icon, required this.theme, this.keyboardType, this.obscure = false, this.suffix});
+
+  @override
+  Widget build(BuildContext context) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscure,
-      style: TextStyle(color: theme.text),
+      style: TextStyle(color: theme.text, fontWeight: FontWeight.w700),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: theme.textMuted),
+        labelStyle: TextStyle(color: theme.textMuted, fontWeight: FontWeight.w600),
         prefixIcon: Icon(icon, color: theme.textMuted),
         suffixIcon: suffix,
         filled: true,
         fillColor: theme.card,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: theme.border),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: theme.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: theme.accent, width: 2),
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: theme.border)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: theme.border)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide(color: theme.accent, width: 1.8)),
       ),
+    );
+  }
+}
+
+class _ErrorBox extends StatelessWidget {
+  final dynamic theme;
+  final String text;
+
+  const _ErrorBox({required this.theme, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(color: theme.danger.withOpacity(.10), borderRadius: BorderRadius.circular(16), border: Border.all(color: theme.danger.withOpacity(.28))),
+      child: Text(text, style: TextStyle(color: theme.danger, fontWeight: FontWeight.w700)),
     );
   }
 }

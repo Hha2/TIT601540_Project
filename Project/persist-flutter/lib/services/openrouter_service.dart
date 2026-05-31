@@ -2,32 +2,27 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 const _apiKey = String.fromEnvironment('OPENROUTER_API_KEY');
-
 const _baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
 const _model = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free';
 
-const _systemPrompt = '''
-You are Persist AI, a supportive and practical personal coach inside the Persist habit-tracking app.
-Help users stay consistent with goals, reflect on progress, and overcome obstacles.
-Be concise, warm, realistic, and actionable.
-Keep replies 2-4 sentences unless the user asks for detail.
-''';
+const _systemPrompt = '''You are Persist AI, a calm, practical habit coach inside Persist.
+Do not shame the user. Be supportive, realistic, and action-focused.
+Keep replies short: 2-4 sentences. Suggest one small next action.''';
 
-Map<String, String> _headers() {
-  return {
-    'Authorization': 'Bearer $_apiKey',
-    'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://persist-app.com',
-    'X-Title': 'Persist',
-  };
-}
+Map<String, String> _headers() => {
+  'Authorization': 'Bearer $_apiKey',
+  'Content-Type': 'application/json',
+  'HTTP-Referer': 'https://persist-app.com',
+  'X-Title': 'Persist',
+};
+
+bool get _hasKey => _apiKey.trim().startsWith('sk-' 'or-' 'v1-');
 
 Future<String> chatWithAI(List<Map<String, String>> history) async {
+  if (!_hasKey) {
+    return 'AI coach is not connected in this build. Add your OpenRouter key with --dart-define to enable replies.';
+  }
   try {
-    if (_apiKey.contains('PASTE_YOUR_REAL') || _apiKey.contains('YOUR_OPENROUTER')) {
-      return 'AI setup error: OpenRouter API key is missing.';
-    }
-
     final response = await http.post(
       Uri.parse(_baseUrl),
       headers: _headers(),
@@ -37,30 +32,22 @@ Future<String> chatWithAI(List<Map<String, String>> history) async {
           {'role': 'system', 'content': _systemPrompt},
           ...history,
         ],
-        'max_tokens': 500,
-        'temperature': 0.7,
+        'max_tokens': 420,
+        'temperature': 0.55,
       }),
     );
 
-    print('OPENROUTER CHAT STATUS: ${response.statusCode}');
-    print('OPENROUTER CHAT BODY: ${response.body}');
-
     if (response.statusCode != 200) {
-      return 'AI error ${response.statusCode}. Check console for OpenRouter response.';
+      return 'AI is busy right now. Try again in a moment, or continue with one small task.';
     }
-
     final data = jsonDecode(response.body);
     final content = data['choices']?[0]?['message']?['content'];
-
     if (content == null || content.toString().trim().isEmpty) {
-      return 'AI returned an empty response.';
+      return 'I am here. Pick the smallest task and start for two minutes.';
     }
-
     return content.toString().trim();
-  } catch (e, stack) {
-    print('OPENROUTER CHAT EXCEPTION: $e');
-    print(stack);
-    return 'AI connection failed. Check console logs.';
+  } catch (_) {
+    return 'Connection is unstable. For now, choose the easiest task and complete one small step.';
   }
 }
 
@@ -69,83 +56,79 @@ Future<List<Map<String, dynamic>>?> generateGoalPlan(
   int days,
   String category,
 ) async {
-  try {
-    if (_apiKey.contains('PASTE_YOUR_REAL') || _apiKey.contains('YOUR_OPENROUTER')) {
-      print('OPENROUTER GOAL ERROR: API key missing.');
-      return null;
-    }
-
-    final prompt = '''
-Create a structured $days-day plan for the goal: "$goalName" (Category: $category).
-
-Return ONLY valid JSON. No markdown. No explanation.
-
-Format:
-[
-  {
-    "dayNum": 1,
-    "title": "Day 1 — Introduction",
-    "tasks": ["Task 1", "Task 2", "Task 3"]
+  if (!_hasKey || days > 30) {
+    return generateLocalGoalPlan(goalName, days, category);
   }
-]
 
-Rules:
-- Generate exactly $days days.
-- Each day must have exactly 3 tasks.
-- Tasks must be specific and actionable.
-- Return only a JSON array.
-''';
+  try {
+    final prompt = '''Create a structured $days-day plan for goal "$goalName" in category "$category".
+Return ONLY valid JSON array. Exactly $days objects. Each object:
+{"dayNum":1,"title":"Day 1 — ...","tasks":["Task 1","Task 2","Task 3"]}
+Each day must have 3 concise tasks.''';
 
     final response = await http.post(
       Uri.parse(_baseUrl),
       headers: _headers(),
       body: jsonEncode({
         'model': _model,
-        'messages': [
-          {'role': 'user', 'content': prompt},
-        ],
-        'max_tokens': 3000,
-        'temperature': 0.3,
+        'messages': [{'role': 'user', 'content': prompt}],
+        'max_tokens': days <= 14 ? 3500 : 7000,
+        'temperature': 0.25,
       }),
-    );
+    ).timeout(const Duration(seconds: 35));
 
-    print('OPENROUTER GOAL STATUS: ${response.statusCode}');
-    print('OPENROUTER GOAL BODY: ${response.body}');
-
-    if (response.statusCode != 200) {
-      return null;
-    }
-
+    if (response.statusCode != 200) return generateLocalGoalPlan(goalName, days, category);
     final data = jsonDecode(response.body);
-    String content = data['choices'][0]['message']['content'].toString();
-
-    content = content
-        .replaceAll('```json', '')
-        .replaceAll('```', '')
-        .trim();
-
+    var content = data['choices'][0]['message']['content'].toString();
+    content = content.replaceAll('```json', '').replaceAll('```', '').trim();
     final start = content.indexOf('[');
     final end = content.lastIndexOf(']');
-
-    if (start == -1 || end == -1 || end <= start) {
-      print('OPENROUTER GOAL JSON ERROR: No JSON array found.');
-      return null;
-    }
-
-    content = content.substring(start, end + 1);
-
-    final parsed = jsonDecode(content);
-
-    if (parsed is! List) {
-      return null;
-    }
-
-    return parsed.map<Map<String, dynamic>>((item) {
-      return Map<String, dynamic>.from(item as Map);
-    }).toList();
-  } catch (e, stack) {
-    print('OPENROUTER GOAL EXCEPTION: $e');
-    print(stack);
-    return null;
+    if (start == -1 || end <= start) return generateLocalGoalPlan(goalName, days, category);
+    final parsed = jsonDecode(content.substring(start, end + 1));
+    if (parsed is! List || parsed.length < days) return generateLocalGoalPlan(goalName, days, category);
+    return parsed.take(days).map<Map<String, dynamic>>((item) => Map<String, dynamic>.from(item as Map)).toList();
+  } catch (_) {
+    return generateLocalGoalPlan(goalName, days, category);
   }
+}
+
+List<Map<String, dynamic>> generateLocalGoalPlan(String goalName, int days, String category) {
+  final cleanGoal = goalName.trim().isEmpty ? 'your goal' : goalName.trim();
+  final phases = [
+    'Foundation', 'Rhythm', 'Consistency', 'Strengthening', 'Review', 'Upgrade',
+    'Momentum', 'Recovery', 'Deepening', 'Final Push'
+  ];
+  final cat = category.toLowerCase();
+  List<String> taskSet(int day) {
+    if (cat.contains('fitness') || cat.contains('health')) {
+      return ['Warm up and complete the core activity', 'Track duration, reps, or effort', 'Do a short recovery check-in'];
+    }
+    if (cat.contains('learning') || cat.contains('career')) {
+      return ['Study or practice one focused topic', 'Write a short summary of what you learned', 'Apply it with one small exercise'];
+    }
+    if (cat.contains('mind')) {
+      return ['Do a short breathing or reflection session', 'Write one honest note about your state', 'Choose one gentle action for tomorrow'];
+    }
+    if (cat.contains('creative')) {
+      return ['Create one small draft or sketch', 'Refine one detail without overthinking', 'Save progress and note what improved'];
+    }
+    return ['Start with one focused action', 'Track what you completed', 'Write one sentence about progress'];
+  }
+
+  return List.generate(days, (i) {
+    final day = i + 1;
+    final bucketSize = (days / phases.length).clamp(1, 99).toDouble();
+    final phaseIndex = (((day - 1) / bucketSize).floor()).clamp(0, phases.length - 1);
+    final phase = phases[phaseIndex];
+    final tasks = taskSet(day);
+    return {
+      'dayNum': day,
+      'title': 'Day $day — $phase',
+      'tasks': [
+        '${tasks[0]} for $cleanGoal',
+        tasks[1],
+        tasks[2],
+      ],
+    };
+  });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'persist_brand.dart';
 
 class AppTheme {
   final String id;
@@ -40,8 +41,8 @@ class AppTheme {
   });
 
   ThemeData toThemeData() {
-    return ThemeData(
-      brightness: isDark ? Brightness.dark : Brightness.light,
+    final base = isDark ? ThemeData.dark() : ThemeData.light();
+    return base.copyWith(
       scaffoldBackgroundColor: background,
       colorScheme: ColorScheme(
         brightness: isDark ? Brightness.dark : Brightness.light,
@@ -62,12 +63,17 @@ class AppTheme {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
       ),
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: accent,
+        selectionColor: accentSoft,
+        selectionHandleColor: accent,
+      ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith(
           (states) => states.contains(WidgetState.selected) ? accent : Colors.grey,
         ),
         trackColor: WidgetStateProperty.resolveWith(
-          (states) => states.contains(WidgetState.selected) ? accentSoft : Colors.grey.withValues(alpha: 0.3),
+          (states) => states.contains(WidgetState.selected) ? accentSoft : Colors.grey.withOpacity(.28),
         ),
       ),
     );
@@ -86,110 +92,170 @@ class AppTheme {
       );
 }
 
-const emeraldTheme = AppTheme(
-  id: 'emerald',
-  name: 'Emerald',
+Color _muted(Color color, bool dark) => Color.alphaBlend(
+      dark ? Colors.white.withOpacity(.62) : Colors.black.withOpacity(.56),
+      color,
+    );
+
+Color _faint(Color color, bool dark) => Color.alphaBlend(
+      dark ? Colors.white.withOpacity(.34) : Colors.black.withOpacity(.30),
+      color,
+    );
+
+Color _border(Color surface, bool dark) => dark
+    ? Color.alphaBlend(Colors.white.withOpacity(.16), surface)
+    : Color.alphaBlend(Colors.black.withOpacity(.08), surface);
+
+Color _soft(Color accent, Color background, bool dark) => Color.alphaBlend(
+      accent.withOpacity(dark ? .18 : .14),
+      background,
+    );
+
+const coreCalmLightTheme = AppTheme(
+  id: 'core_light',
+  name: 'Core Calm Light',
   isDark: false,
-  background: Color(0xFFF0FDF4),
-  card: Color(0xFFFFFFFF),
-  cardAlt: Color(0xFFDCFCE7),
-  text: Color(0xFF14532D),
-  textMuted: Color(0xFF166534),
-  textFaint: Color(0xFF86EFAC),
-  border: Color(0xFFBBF7D0),
-  accent: Color(0xFF10B981),
-  accentSoft: Color(0xFFD1FAE5),
-  gradient: [Color(0xFF10B981), Color(0xFF059669)],
-  gradientHeader: [Color(0xFF059669), Color(0xFF047857)],
-  success: Color(0xFF22C55E),
-  warning: Color(0xFFF59E0B),
-  danger: Color(0xFFEF4444),
+  background: PersistBrand.coreLightBackground,
+  card: Colors.white,
+  cardAlt: PersistBrand.coreLightSurface,
+  text: PersistBrand.coreLightText,
+  textMuted: Color(0xFF60737B),
+  textFaint: Color(0xFF9BAAAD),
+  border: Color(0xFFD4E8E6),
+  accent: PersistBrand.coreLightPrimary,
+  accentSoft: PersistBrand.coreLightSurface,
+  gradient: [PersistBrand.coreLightPrimary, PersistBrand.coreLightSecondary],
+  gradientHeader: [PersistBrand.coreLightSecondary, PersistBrand.coreLightPrimary],
+  success: Color(0xFF36A878),
+  warning: Color(0xFFE9A84D),
+  danger: PersistBrand.coreLightAccent,
 );
 
-const roseTheme = AppTheme(
-  id: 'rose',
-  name: 'Rose',
-  isDark: false,
-  background: Color(0xFFFFF1F2),
-  card: Color(0xFFFFFFFF),
-  cardAlt: Color(0xFFFFE4E6),
-  text: Color(0xFF881337),
-  textMuted: Color(0xFF9F1239),
-  textFaint: Color(0xFFFDA4AF),
-  border: Color(0xFFFECDD3),
-  accent: Color(0xFFF43F5E),
-  accentSoft: Color(0xFFFFE4E6),
-  gradient: [Color(0xFFF43F5E), Color(0xFFE11D48)],
-  gradientHeader: [Color(0xFFE11D48), Color(0xFFBE123C)],
-  success: Color(0xFF22C55E),
-  warning: Color(0xFFF59E0B),
-  danger: Color(0xFFEF4444),
-);
-
-const violetTheme = AppTheme(
-  id: 'violet',
-  name: 'Violet',
-  isDark: false,
-  background: Color(0xFFF5F3FF),
-  card: Color(0xFFFFFFFF),
-  cardAlt: Color(0xFFEDE9FE),
-  text: Color(0xFF4C1D95),
-  textMuted: Color(0xFF5B21B6),
-  textFaint: Color(0xFFC4B5FD),
-  border: Color(0xFFDDD6FE),
-  accent: Color(0xFF8B5CF6),
-  accentSoft: Color(0xFFEDE9FE),
-  gradient: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-  gradientHeader: [Color(0xFF7C3AED), Color(0xFF6D28D9)],
-  success: Color(0xFF22C55E),
-  warning: Color(0xFFF59E0B),
-  danger: Color(0xFFEF4444),
-);
-
-const obsidianTheme = AppTheme(
-  id: 'obsidian',
-  name: 'Obsidian',
+const coreCalmDarkTheme = AppTheme(
+  id: 'core_dark',
+  name: 'Core Calm Dark',
   isDark: true,
-  background: Color(0xFF0F172A),
-  card: Color(0xFF1E293B),
-  cardAlt: Color(0xFF0F172A),
-  text: Color(0xFFF1F5F9),
-  textMuted: Color(0xFF94A3B8),
-  textFaint: Color(0xFF475569),
-  border: Color(0xFF334155),
-  accent: Color(0xFF38BDF8),
-  accentSoft: Color(0xFF0C4A6E),
-  gradient: [Color(0xFF38BDF8), Color(0xFF0EA5E9)],
-  gradientHeader: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
-  success: Color(0xFF22C55E),
-  warning: Color(0xFFF59E0B),
-  danger: Color(0xFFEF4444),
+  background: PersistBrand.coreDarkBackground,
+  card: PersistBrand.coreDarkSurface,
+  cardAlt: Color(0xFF1D3B46),
+  text: PersistBrand.coreDarkText,
+  textMuted: Color(0xFFAACBD0),
+  textFaint: Color(0xFF6D8D96),
+  border: Color(0xFF294C57),
+  accent: PersistBrand.coreDarkPrimary,
+  accentSoft: Color(0xFF14353D),
+  gradient: [PersistBrand.coreDarkPrimary, PersistBrand.coreDarkSecondary],
+  gradientHeader: [PersistBrand.coreDarkBackground, PersistBrand.coreDarkSurface],
+  success: Color(0xFF64D6A6),
+  warning: Color(0xFFFFC56D),
+  danger: PersistBrand.coreDarkAccent,
 );
 
-const midnightTheme = AppTheme(
-  id: 'midnight',
-  name: 'Midnight',
+const lavenderFocusTheme = AppTheme(
+  id: 'lavender_focus',
+  name: 'Lavender Focus',
+  isDark: false,
+  background: PersistBrand.lavenderBackground,
+  card: Colors.white,
+  cardAlt: PersistBrand.lavenderSurface,
+  text: PersistBrand.lavenderText,
+  textMuted: Color(0xFF6E6E91),
+  textFaint: Color(0xFFA7A5C3),
+  border: Color(0xFFE0DDF3),
+  accent: PersistBrand.lavenderPrimary,
+  accentSoft: PersistBrand.lavenderSurface,
+  gradient: [PersistBrand.lavenderPrimary, PersistBrand.lavenderSecondary],
+  gradientHeader: [PersistBrand.lavenderSecondary, PersistBrand.lavenderPrimary],
+  success: Color(0xFF62B990),
+  warning: Color(0xFFE8A84B),
+  danger: PersistBrand.lavenderAccent,
+);
+
+const mistySkyTheme = AppTheme(
+  id: 'misty_sky',
+  name: 'Misty Sky',
+  isDark: false,
+  background: PersistBrand.skyBackground,
+  card: Colors.white,
+  cardAlt: PersistBrand.skySurface,
+  text: PersistBrand.skyText,
+  textMuted: Color(0xFF607A91),
+  textFaint: Color(0xFFA2B5C4),
+  border: Color(0xFFD8E7F2),
+  accent: PersistBrand.skyPrimary,
+  accentSoft: PersistBrand.skySurface,
+  gradient: [PersistBrand.skyPrimary, PersistBrand.skySecondary],
+  gradientHeader: [PersistBrand.skySecondary, PersistBrand.skyPrimary],
+  success: Color(0xFF4CA78F),
+  warning: Color(0xFFE8A84B),
+  danger: PersistBrand.skyAccent,
+);
+
+const royalVioletNightTheme = AppTheme(
+  id: 'royal_violet',
+  name: 'Royal Violet Night',
   isDark: true,
-  background: Color(0xFF09090B),
-  card: Color(0xFF18181B),
-  cardAlt: Color(0xFF27272A),
-  text: Color(0xFFFAFAFA),
-  textMuted: Color(0xFFA1A1AA),
-  textFaint: Color(0xFF52525B),
-  border: Color(0xFF3F3F46),
-  accent: Color(0xFFA78BFA),
-  accentSoft: Color(0xFF2E1065),
-  gradient: [Color(0xFFA78BFA), Color(0xFF8B5CF6)],
-  gradientHeader: [Color(0xFF8B5CF6), Color(0xFF7C3AED)],
-  success: Color(0xFF22C55E),
-  warning: Color(0xFFF59E0B),
-  danger: Color(0xFFEF4444),
+  background: PersistBrand.violetBackground,
+  card: PersistBrand.violetSurface,
+  cardAlt: Color(0xFF2C1B4C),
+  text: PersistBrand.violetText,
+  textMuted: Color(0xFFC8BDE5),
+  textFaint: Color(0xFF82729E),
+  border: Color(0xFF3D2867),
+  accent: PersistBrand.violetPrimary,
+  accentSoft: Color(0xFF281649),
+  gradient: [PersistBrand.violetPrimary, PersistBrand.violetSecondary],
+  gradientHeader: [PersistBrand.violetBackground, PersistBrand.violetSurface],
+  success: Color(0xFF7FE0CE),
+  warning: Color(0xFFFFC56D),
+  danger: PersistBrand.violetAccent,
 );
 
-const Map<String, AppTheme> allThemes = {
-  'emerald': emeraldTheme,
-  'rose': roseTheme,
-  'violet': violetTheme,
-  'obsidian': obsidianTheme,
-  'midnight': midnightTheme,
+const berryEclipseTheme = AppTheme(
+  id: 'berry_eclipse',
+  name: 'Berry Eclipse',
+  isDark: true,
+  background: PersistBrand.berryBackground,
+  card: PersistBrand.berrySurface,
+  cardAlt: Color(0xFF351634),
+  text: PersistBrand.berryText,
+  textMuted: Color(0xFFD8B7C7),
+  textFaint: Color(0xFF906073),
+  border: Color(0xFF4A1F43),
+  accent: PersistBrand.berryPrimary,
+  accentSoft: Color(0xFF351426),
+  gradient: [PersistBrand.berryPrimary, PersistBrand.berrySecondary],
+  gradientHeader: [PersistBrand.berryBackground, PersistBrand.berrySurface],
+  success: PersistBrand.berryAccent,
+  warning: Color(0xFFFFC56D),
+  danger: Color(0xFFFF8FA3),
+);
+
+// Default theme used by old code names.
+const persistTheme = coreCalmLightTheme;
+const calmNavyTheme = coreCalmDarkTheme;
+const emeraldTheme = coreCalmLightTheme;
+const roseTheme = mistySkyTheme;
+const violetTheme = lavenderFocusTheme;
+const obsidianTheme = coreCalmDarkTheme;
+const midnightTheme = royalVioletNightTheme;
+
+const Map<String, AppTheme> allAppThemes = {
+  'core_light': coreCalmLightTheme,
+  'core_dark': coreCalmDarkTheme,
+  'lavender_focus': lavenderFocusTheme,
+  'misty_sky': mistySkyTheme,
+  'royal_violet': royalVioletNightTheme,
+  'berry_eclipse': berryEclipseTheme,
+
+  // Backward-compatible IDs so older screens/settings do not crash.
+  'persist': coreCalmLightTheme,
+  'calm_navy': coreCalmDarkTheme,
+  'emerald': coreCalmLightTheme,
+  'rose': mistySkyTheme,
+  'violet': lavenderFocusTheme,
+  'obsidian': coreCalmDarkTheme,
+  'midnight': royalVioletNightTheme,
 };
+
+const Map<String, AppTheme> allThemes = allAppThemes;

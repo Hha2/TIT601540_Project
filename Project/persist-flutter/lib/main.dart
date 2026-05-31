@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'constants/persist_brand.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/goals_provider.dart';
 import 'providers/theme_provider.dart';
-import 'screens/auth/login_screen.dart';
+import 'screens/landing_screen.dart';
 import 'screens/main_screen.dart';
 
 void main() async {
@@ -25,10 +27,10 @@ class PersistApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => GoalsProvider()),
       ],
-      child: Consumer2<ThemeProvider, AuthProvider>(
-        builder: (context, themeProvider, authProvider, _) {
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
           return MaterialApp(
-            title: 'Persist',
+            title: PersistBrand.appName,
             debugShowCheckedModeBanner: false,
             theme: themeProvider.theme.toThemeData(),
             home: const AppRoot(),
@@ -39,77 +41,61 @@ class PersistApp extends StatelessWidget {
   }
 }
 
-class AppRoot extends StatelessWidget {
+class AppRoot extends StatefulWidget {
   const AppRoot({super.key});
+
+  @override
+  State<AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<AppRoot> {
+  String? _lastUid;
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
-    if (auth.loading) {
-      final theme = context.read<ThemeProvider>().theme;
-      return Scaffold(
-        backgroundColor: theme.background,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: theme.card,
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: theme.border),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 24,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: Image.asset('assets/Logo.jpeg', fit: BoxFit.cover),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                'Persist',
-                style: TextStyle(
-                  color: theme.text,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Preparing your progress...',
-                style: TextStyle(color: theme.textMuted, fontSize: 13),
-              ),
-              const SizedBox(height: 22),
-              SizedBox(
-                width: 34,
-                height: 34,
-                child: CircularProgressIndicator(color: theme.accent, strokeWidth: 3),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    if (auth.loading) return const PersistNativeSplash();
 
     if (!auth.isAuthenticated) {
-      return const LoginScreen();
+      _lastUid = null;
+      return const LandingScreen();
     }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<GoalsProvider>().init(auth.user!.uid);
-    });
+    final uid = auth.user!.uid;
+    if (_lastUid != uid) {
+      _lastUid = uid;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<GoalsProvider>().init(uid);
+      });
+    }
 
     return const MainScreen();
+  }
+}
+
+class PersistNativeSplash extends StatelessWidget {
+  const PersistNativeSplash({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Color(0xFF081822),
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF081822),
+        body: SizedBox.expand(
+          child: Image.asset(
+            PersistAssets.loadingDark,
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+          ),
+        ),
+      ),
+    );
   }
 }

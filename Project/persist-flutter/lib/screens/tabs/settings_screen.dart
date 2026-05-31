@@ -387,8 +387,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: TextStyle(color: theme.textMuted, fontSize: 12)),
                     const SizedBox(height: 8),
                     Row(
-                      children: ['emerald', 'rose', 'violet'].map((id) {
-                        final t = allThemes[id]!;
+                      children: ['core_light', 'lavender_focus', 'misty_sky'].map((id) {
+                        final t = allThemes[id] ?? theme;
                         final selected = themeProvider.themeId == id;
                         return Padding(
                           padding: const EdgeInsets.only(right: 12),
@@ -434,8 +434,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: TextStyle(color: theme.textMuted, fontSize: 12)),
                     const SizedBox(height: 8),
                     Row(
-                      children: ['obsidian', 'midnight'].map((id) {
-                        final t = allThemes[id]!;
+                      children: ['core_dark', 'royal_violet', 'berry_eclipse'].map((id) {
+                        final t = allThemes[id] ?? theme;
                         final selected = themeProvider.themeId == id;
                         return Padding(
                           padding: const EdgeInsets.only(right: 12),
